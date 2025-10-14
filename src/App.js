@@ -1,23 +1,57 @@
-import logo from './logo.svg';
+import React, { useState, useEffect, useRef } from "react";
 import './App.css';
 
 function App() {
+  const [messages, setMessages] = useState([]);
+  const [messageInput, setMessageInput] = useState('');
+  const socketRef = useRef(null);
+
+// WebSocket connection setup
+  useEffect(() => {
+    const socket = new WebSocket('ws://localhost:3001');
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log('WebSocket connection established.');
+    };
+
+    socket.onmessage = (event) => {
+      const receivedMessage = JSON.parse(event.data);
+      setMessages(prevMessages => [...prevMessages, receivedMessage]);
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, []);
+
+  const sendMessage = () => {
+    if (socketRef.current && messageInput.trim() !== '') {
+      socketRef.current.send(JSON.stringify(messageInput));
+      setMessageInput('');
+    }
+  };
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <div className="chat-container">
+        <div className="chat-messages">
+          {messages.map((message, index) => (
+            <div key={index} className="message">
+              {message}
+            </div>
+          ))}
+        </div>
+        <div className="chat-input">
+          <input
+            type="text"
+            placeholder="Type your message..."
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+          />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+      </div>
     </div>
   );
 }
