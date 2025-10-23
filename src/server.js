@@ -20,7 +20,7 @@ wsServer.on('request', (request) => {
   // Handle messages from the client
   connection.on('message', (message) => {
     if (message.type === 'utf8') {
-      console.log('📩 Received message:', message.utf8Data);
+      console.log('Received message:', message.utf8Data);
     }
   });
 
