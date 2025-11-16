@@ -26,8 +26,8 @@
   },
   "jest": {
     "moduleNameMapper": {
-      "^@stomp/stompjs$": "<rootDir>/src/__mocks__/stompjs.mock.js",
-      "^sockjs-client$": "<rootDir>/src/__mocks__/sockjs-client.js"
+      "^@stomp/stompjs$": "<rootDir>/src/mocks/stompjs.mock.js",
+      "^sockjs-client$": "<rootDir>/src/mocks/sockjs-client.js"
     }
   },
   "eslintConfig": {

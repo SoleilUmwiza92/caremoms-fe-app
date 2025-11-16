@@ -284,3 +284,28 @@
   }
 }
 
+/* Chat Message Styles (for Chat.jsx component) */
+.chat-message {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 10px;
+  background: #f8f9fa;
+}
+
+.my-message {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  text-align: right;
+}
+
+.other-message {
+  background: #f8f9fa;
+  color: #333;
+}
+
+.chat-timestamp {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-top: 0.25rem;
+}
+

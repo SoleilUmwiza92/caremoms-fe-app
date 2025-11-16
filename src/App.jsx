@@ -25,26 +25,28 @@ function App() {
   // STOMP connection state
   const stompClientRef = useRef(null);
   const subscriptionRef = useRef(null);
-  const initializedRef = useRef(false); // prevents duplicate init
+  const isConnectingRef = useRef(false); // prevents duplicate connections
 
 
   // WebSocket + STOMP Initialization
   useEffect(() => {
-    // Guard prevents StrictMode double-mount problem
-    if (initializedRef.current) {
-      console.log("STOMP already initialized — skipping setup.");
+    // Guard prevents duplicate connections
+    if (isConnectingRef.current || (stompClientRef.current && stompClientRef.current.connected)) {
+      console.log("STOMP already initialized or connecting — skipping setup.");
       return;
     }
-    initializedRef.current = true;
+    isConnectingRef.current = true;
 
     console.log("🔌 Initializing WebSocket connection to:", SOCKET_URL);
 
-    // Factory function for auto-reconnect compatibility
-    const client = Stomp.over(() => new SockJS(SOCKET_URL));
+    // Create SockJS instance first, then wrap with Stomp
+    const socket = new SockJS(SOCKET_URL);
+    const client = Stomp.over(socket);
 
     client.debug = (str) => console.log("[STOMP DEBUG]", str);
 
-    client.reconnectDelay = 5000; // Auto reconnect every 5s
+    // Disable auto-reconnect to prevent duplicate connections
+    client.reconnectDelay = 0;
     client.heartbeatIncoming = 4000;
     client.heartbeatOutgoing = 4000;
 
@@ -73,7 +75,12 @@ function App() {
         setIsConnected(true);
 
 
-        // Subscribe ONCE
+        // Subscribe ONCE - check if already subscribed
+        if (subscriptionRef.current) {
+          console.log("⚠️ Subscription already exists, skipping");
+          return;
+        }
+
         const sub = client.subscribe("/topic/messages", (msg) => {
           try {
             const body = JSON.parse(msg.body);
@@ -85,7 +92,19 @@ function App() {
             };
 
             console.log("📨 Received message:", formatted);
-            setMessages((prev) => [...prev, formatted]);
+            // Use functional update to prevent duplicate messages
+            setMessages((prev) => {
+              // Check if message already exists (prevent duplicates)
+              const messageId = `${formatted.user}-${formatted.text}-${formatted.timestamp}`;
+              const exists = prev.some(
+                (m) => `${m.user}-${m.text}-${m.timestamp}` === messageId
+              );
+              if (exists) {
+                console.log("⚠️ Duplicate message detected, skipping");
+                return prev;
+              }
+              return [...prev, formatted];
+            });
           } catch (err) {
             console.error("Error parsing incoming message:", err);
           }
@@ -99,13 +118,14 @@ function App() {
         console.error("❌ STOMP connection failed:", error);
         console.error("Failed to connect to:", SOCKET_URL);
         setIsConnected(false);
+        isConnectingRef.current = false; // Reset on error to allow retry
       }
     );
 
     // Cleanup (component unmount)
-
     return () => {
       console.log("🧹 Cleaning up WebSocket connection");
+      isConnectingRef.current = false;
 
       try {
         if (subscriptionRef.current) {
@@ -113,17 +133,18 @@ function App() {
           subscriptionRef.current = null;
         }
 
-        if (stompClientRef.current && stompClientRef.current.connected) {
-          stompClientRef.current.disconnect(() => {
-            console.log("🔌 Disconnected cleanly");
-            setIsConnected(false);
-          });
+        if (stompClientRef.current) {
+          if (stompClientRef.current.connected) {
+            stompClientRef.current.disconnect(() => {
+              console.log("🔌 Disconnected cleanly");
+            });
+          }
+          stompClientRef.current = null;
         }
       } catch (err) {
         console.error("Cleanup error:", err);
       } finally {
-        stompClientRef.current = null;
-        initializedRef.current = false;
+        setIsConnected(false);
       }
     };
   }, []);
