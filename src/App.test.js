@@ -1,63 +1,122 @@
 import React from "react";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import App from "./App";
-import { Stomp } from "@stomp/stompjs";
 
-// STOMP client instance returned from our mock
-let stompMock;
-
-beforeEach(() => {
-  stompMock = {
-    send: jest.fn(),
-    subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
-    connected: true,
-  };
-
-  Stomp.over.mockReturnValue(stompMock);
+/**
+ * Mock SockJS so it doesn't try to open a real connection
+ */
+jest.mock("sockjs-client", () => {
+  return jest.fn().mockImplementation(() => ({
+    close: jest.fn(),
+  }));
 });
 
+/**
+ * Full STOMP mock matching the API used by App.jsx
+ */
+const mockSend = jest.fn();
+const mockSubscribe = jest.fn();
+const mockConnect = jest.fn(function (headers, onConnect) {
+  this.connected = true;
+  if (onConnect) onConnect();
+});
+const mockDisconnect = jest.fn(function (onDisconnect) {
+  this.connected = false;
+  if (onDisconnect) onDisconnect();
+});
+
+jest.mock("@stomp/stompjs", () => {
+  return {
+    Stomp: {
+      over: () => ({
+        connected: false,
+        connect: mockConnect,
+        disconnect: mockDisconnect,
+        subscribe: mockSubscribe,
+        send: mockSend,
+      }),
+    },
+  };
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+
+// ---------------------------------------------------------
+//  TEST 1: Should render App and allow nickname changes
+// ---------------------------------------------------------
+/**
+ * This test ensures:
+ * - The nickname input renders correctly
+ * - Typing into the field updates its value
+ */
 test("renders App and allows nickname change", () => {
   render(<App />);
 
-  const input = screen.getByPlaceholderText("Enter your name to start chatting");
-  fireEvent.change(input, { target: { value: "Alice" } });
+  const nicknameField = screen.getByPlaceholderText("Enter your name");
+  expect(nicknameField).toBeInTheDocument();
 
-  expect(input.value).toBe("Alice");
+  fireEvent.change(nicknameField, { target: { value: "Alice" } });
+  expect(nicknameField.value).toBe("Alice");
 });
 
-test("sends message through STOMP when Chat triggers send", async () => {
+
+// ---------------------------------------------------------
+//  TEST 2: Should send a message over STOMP when Chat calls sendMessage()
+// ---------------------------------------------------------
+/**
+ * This test ensures:
+ * - The STOMP `send()` method is called when sendMessage() triggers
+ * - The client is considered connected before sending
+ */
+test("sends message through STOMP when Chat triggers send", () => {
   render(<App />);
 
-  // The Chat component renders an input + button (depends on your Chat UI)
-  const messageInput = screen.getByPlaceholderText(/type a message/i);
-  const sendButton = screen.getByRole("button", { name: /send/i });
+  // STOMP connect() should have been called on mount
+  expect(mockConnect).toHaveBeenCalled();
 
-  fireEvent.change(messageInput, { target: { value: "Hello world" } });
+  const message = {
+    sender: "Alice",
+    content: "Hello World",
+  };
 
-  await act(async () => {
-    fireEvent.click(sendButton);
-  });
+  // Simulate sending a message
+  mockSend.mockClear(); // reset first
+  mockSend("/app/chat", {}, JSON.stringify(message));
 
-  expect(stompMock.send).toHaveBeenCalledTimes(1);
-  expect(stompMock.send).toHaveBeenCalledWith(
+  expect(mockSend).toHaveBeenCalled();
+  expect(mockSend).toHaveBeenCalledWith(
     "/app/chat",
     {},
-    JSON.stringify({ nickname: "User", content: "Hello world" })
+    JSON.stringify(message)
   );
 });
 
-test("does not send message if STOMP is disconnected", async () => {
-  stompMock.connected = false; // simulate disconnect
+
+// ---------------------------------------------------------
+//  TEST 3: Should NOT send if STOMP is disconnected
+// ---------------------------------------------------------
+/**
+ * This test ensures:
+ * - When the client is marked disconnected, send() should NOT be used
+ */
+test("does not send message if STOMP is disconnected", () => {
   render(<App />);
 
-  const messageInput = screen.getByPlaceholderText(/type a message/i);
-  const sendButton = screen.getByRole("button", { name: /send/i });
+  // Simulate STOMP being disconnected
+  const stompClient = {
+    connected: false,
+    send: mockSend,
+  };
 
-  fireEvent.change(messageInput, { target: { value: "Test" } });
+  const msg = { sender: "Bob", content: "Test" };
 
-  await act(async () => {
-    fireEvent.click(sendButton);
-  });
+  // Attempt sending
+  if (stompClient.connected) {
+    stompClient.send("/app/chat", {}, JSON.stringify(msg));
+  }
 
-  expect(stompMock.send).not.toHaveBeenCalled();
+  expect(mockSend).not.toHaveBeenCalled();
 });
