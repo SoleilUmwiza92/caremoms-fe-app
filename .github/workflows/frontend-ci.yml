@@ -1,0 +1,61 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "caremoms-frontend"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "caremoms-frontend"
+
+jobs:
+  build-and-dockerize:
+    runs-on: ubuntu-latest
+
+    # Global default: Runs all 'run' commands inside the subfolder
+    defaults:
+      run:
+        working-directory: caremoms-frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Setup Node Environment
+      - name: Use Node 20 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: caremoms-frontend/package-lock.json
+
+      # 2. Install Dependencies (Clean Install)
+      - name: Install dependencies
+        run: npm ci
+
+      # 3. Run Tests
+      - name: Run frontend tests
+        env:
+          CI: true
+        run: npm test -- --watchAll=false
+
+      # 4. Build the Static Files (Verification)
+      - name: Build application
+        run: npm run build
+
+      # 5. Setup Docker Environment
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 6. Build Docker Image
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          # Important: Point to the subdirectory
+          context: caremoms-frontend
+          # Optional: Explicitly point to the Dockerfile if not at root of context
+          file: caremoms-frontend/Dockerfile 
+          push: false # Change to true when you add registry credentials
+          tags: caremoms-frontend:latest
