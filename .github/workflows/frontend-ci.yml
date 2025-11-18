@@ -3,10 +3,10 @@ name: Frontend CI
 on:
   push:
     paths:
-      - "caremoms-frontend/**"
+      - "caremoms-frontend"
   pull_request:
     paths:
-      - "caremoms-frontend/**"
+      - "caremoms-frontend"
 
 jobs:
   test:
