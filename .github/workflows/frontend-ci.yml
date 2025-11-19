@@ -1,5 +1,4 @@
 name: Frontend CI & Docker
-
 on:
   push:
     # Trigger only on pushes to main that affect the frontend directory
