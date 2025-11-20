@@ -4,19 +4,18 @@ import "../styles/chat.css";
 function Chat({ messages, userName, onSendMessage }) {
   const [messageInput, setMessageInput] = useState("");
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!messageInput.trim()) return;
 
     const messageData = {
-      text: messageInput,
-      user: userName,
-      timestamp: new Date().toLocaleTimeString(),
+      nickname: userName,
+      content: messageInput,
+      timestamp: new Date().toISOString(),
     };
 
-    // Use parent send ONLY
     if (onSendMessage) {
-      const ok = onSendMessage(messageData);
-      if (!ok) return; // do NOT clear input if sending failed
+      const ok = await onSendMessage(messageData);
+      if (!ok) return;
     }
 
     setMessageInput("");
@@ -29,11 +28,13 @@ function Chat({ messages, userName, onSendMessage }) {
           <div
             key={i}
             className={`chat-message ${
-              m.user === userName ? "my-message" : "other-message"
+              m.nickname === userName ? "my-message" : "other-message"
             }`}
           >
-            <strong>{m.user}:</strong> {m.text}
-            <div className="chat-timestamp">{m.timestamp}</div>
+            <strong>{m.nickname || "Anonymous"}:</strong> {m.content}
+            <div className="chat-timestamp">
+              {new Date(m.timestamp).toLocaleTimeString()}
+            </div>
           </div>
         ))}
       </div>

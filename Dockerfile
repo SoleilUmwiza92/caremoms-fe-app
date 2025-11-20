@@ -1,37 +1,34 @@
-# Multi-stage build for React application
-# Stage 1: Build
+# --- Stage 1: React Build ---
 FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
+# Install dependencies first for caching
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy source code
+# Copy the rest of the source code
 COPY . .
 
-# Build argument for WebSocket URL
-ARG REACT_APP_WS_URL=http://localhost:8080/ws
-ENV REACT_APP_WS_URL=$REACT_APP_WS_URL
+# Optional: Build argument for REST API URL
+ARG REACT_APP_API_URL=http://localhost:8080/api/chat
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
-# Build the application
+# Build React app
 RUN npm run build
 
-# Stage 2: Production with Nginx
+# --- Stage 2: NGINX Production ---
 FROM nginx:alpine
 
-# Copy built assets from build stage
-COPY --from=build /app/build /usr/share/nginx/html
+# Remove default Nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy custom nginx configuration
+# Copy custom Nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port
+# Copy static build files
+COPY --from=build /app/build /usr/share/nginx/html
+
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
-
