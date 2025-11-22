@@ -1,50 +1,50 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "../styles/chat.css";
 
-function Chat({ messages, userName, onSendMessage }) {
-  const [messageInput, setMessageInput] = useState("");
+function Chat({ nickname, messages, onSend }) {
+  const [input, setInput] = useState("");
+  const bottomRef = useRef(null);
+
+  // Auto scroll to bottom
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const sendMessage = async () => {
-    if (!messageInput.trim()) return;
+    if (!input.trim()) return;
 
-    const messageData = {
-      nickname: userName,
-      content: messageInput,
-      timestamp: new Date().toISOString(),
-    };
-
-    if (onSendMessage) {
-      const ok = await onSendMessage(messageData);
-      if (!ok) return;
-    }
-
-    setMessageInput("");
+    const ok = await onSend(input);
+    if (ok) setInput("");
   };
 
   return (
     <div className="chat-container">
+      <div className="chat-header">Logged in as: <strong>{nickname}</strong></div>
+
       <div className="chat-messages">
         {messages.map((m, i) => (
           <div
             key={i}
             className={`chat-message ${
-              m.nickname === userName ? "my-message" : "other-message"
+              m.nickname === nickname ? "my-message" : "other-message"
             }`}
           >
-            <strong>{m.nickname || "Anonymous"}:</strong> {m.content}
+            <div className="chat-nickname">{m.nickname}</div>
+            <div>{m.content}</div>
             <div className="chat-timestamp">
               {new Date(m.timestamp).toLocaleTimeString()}
             </div>
           </div>
         ))}
+        <div ref={bottomRef}></div>
       </div>
 
       <div className="chat-input-container">
         <input
           type="text"
-          placeholder="Type a message..."
-          value={messageInput}
-          onChange={(e) => setMessageInput(e.target.value)}
+          placeholder="Type your message..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
         />
         <button onClick={sendMessage}>Send</button>
