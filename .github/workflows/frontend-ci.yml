@@ -1,63 +1,37 @@
 name: Frontend CI & Docker
+
 on:
   push:
-    # Trigger only on pushes to main that affect the frontend directory
     branches: ["main"]
-    paths:
-      - "caremoms-frontend/**"
   pull_request:
-    # Trigger only on PRs targeting main that affect the frontend directory
     branches: ["main"]
-    paths:
-      - "caremoms-frontend/**"
 
 jobs:
-  build-and-dockerize:
+  build-frontend:
     runs-on: ubuntu-latest
-    
-    # Set the working directory for all 'run' commands
-    defaults:
-      run:
-        working-directory: caremoms-frontend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
+      - name: Debug folder structure
+        run: ls -R .
 
-      ### 1. NODE.JS SETUP & CACHING ###
-      - name: Use Node 20 (LTS) and Cache Dependencies
+      - name: Use Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          # Path to the lock file, relative to the repository root:
-          cache-dependency-path: caremoms-frontend/package-lock.json 
+          node-version: 18
+          cache: "npm"
+          cache-dependency-path: "Caremoms-frontend/package-lock.json"
 
-      ### 2. CI STEPS ###
-      - name: Install dependencies (npm ci)
-        # 'npm ci' ensures a clean, deterministic install based on package-lock.json
+      - name: Install dependencies
+        working-directory: ./Caremoms-frontend
         run: npm ci
 
-      - name: Run frontend tests
-        env:
-          CI: true
-        # Executes 'npm test' using the package.json script
+      - name: Run tests
+        working-directory: ./Caremoms-frontend
         run: npm test -- --watchAll=false
 
-      - name: Build static files (Verification)
-        # Verifies the build process works before Dockerizing
+      - name: Build frontend
+        working-directory: ./Caremoms-frontend
         run: npm run build
-
-      ### 3. DOCKER BUILD ###
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (Verification)
-        uses: docker/build-push-action@v6
-        with:
-          # Context must point to the directory containing the Dockerfile and source code
-          context: caremoms-frontend 
-          # Explicitly point to the Dockerfile
-          file: caremoms-frontend/Dockerfile
-          push: false # Set to true to push to a registry (requires registry login steps)
-          tags: caremoms-frontend:latest
