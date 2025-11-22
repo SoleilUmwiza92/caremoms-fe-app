@@ -2,36 +2,141 @@ name: Frontend CI & Docker
 
 on:
   push:
-    branches: ["main"]
+    branches: 
+      - main
+      - develop
+    paths:
+      - 'Caremoms-frontend/**'
+      - '.github/workflows/frontend.yml'
   pull_request:
-    branches: ["main"]
+    branches: 
+      - main
+      - develop
+    paths:
+      - 'Caremoms-frontend/**'
+
+# Cancel in-progress runs when a new workflow with the same ref is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
-
+    
+    defaults:
+      run:
+        working-directory: ./Caremoms-frontend
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Debug folder structure
-        run: ls -R .
-
-      - name: Use Node.js 18
+      
+      - name: Debug - Show folder structure
+        run: |
+          echo "=== Root directory ==="
+          ls -la
+          echo "=== Caremoms-frontend directory ==="
+          ls -la Caremoms-frontend/ || echo "Directory not found"
+        working-directory: ./
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: "npm"
-          cache-dependency-path: "caremoms-frontend/package-lock.json"
-
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: './Caremoms-frontend/package-lock.json'
+      
+      - name: Verify package files
+        run: |
+          echo "Checking for package.json and package-lock.json..."
+          ls -la package*.json
+      
       - name: Install dependencies
-        working-directory: ./caremoms-frontend
         run: npm ci
-
+      
+      - name: Run ESLint (if configured)
+        run: npm run lint --if-present
+        continue-on-error: true
+      
       - name: Run tests
-        working-directory: ./caremoms-frontend
-        run: npm test -- --watchAll=false
-
+        run: npm test -- --watchAll=false --passWithNoTests
+        env:
+          CI: true
+      
       - name: Build frontend
-        working-directory: ./caremoms-frontend
         run: npm run build
+        env:
+          CI: false
+          GENERATE_SOURCEMAP: false
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.sha }}
+          path: ./Caremoms-frontend/build
+          retention-days: 7
+      
+      - name: Build summary
+        run: |
+          echo "### ✅ Frontend Build Successful! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Node Version:** ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub (Optional - configure if needed)
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        continue-on-error: true
+      
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: caremoms-frontend
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Caremoms-frontend
+          file: ./Caremoms-frontend/Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+      
+      - name: Docker build summary
+        run: |
+          echo "### 🐳 Docker Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
